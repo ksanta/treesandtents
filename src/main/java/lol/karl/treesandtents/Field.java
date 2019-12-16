@@ -1,5 +1,9 @@
 package lol.karl.treesandtents;
 
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
+
 import static lol.karl.treesandtents.Spot.*;
 
 public class Field {
@@ -27,15 +31,8 @@ public class Field {
 
     public void solve() {
         // Some one-off rules to apply
-        for (int rowIndex = 0; rowIndex < spots.length; rowIndex++) {
-            for (int columnIndex = 0; columnIndex < spots[0].length; columnIndex++) {
-                if (isTent(rowIndex, columnIndex)) {
-                    placeTent(rowIndex, columnIndex);
-                } else if (spots[rowIndex][columnIndex] == null) {
-                    markEmptyIfDiagonalToATree(rowIndex, columnIndex);
-                }
-            }
-        }
+        applyToEachSpot(this::rePlaceTent);
+        applyToEachSpot(this::markSpotsEmptyIfDiagonalToATree);
 
         boolean spotsUpdated = true;
 
@@ -51,21 +48,41 @@ public class Field {
                 spotsUpdated = true;
             }
 
-            for (int row = 0; row < spots.length; row++) {
-                for (int column = 0; column < spots[0].length; column++) {
-                    if (isTree(row, column)) {
-                        if (placeTentNextToTreeIfOnlyOneUnmarkedSpotLeft(row, column)) {
-                            spotsUpdated = true;
-                        }
-                    }
-                }
+            if (applyToEachSpot(this::placeTentNextToTreeIfOnlyOneUnmarkedSpotLeft)) {
+                spotsUpdated = true;
             }
         }
 
         print(spots);
     }
 
+    private boolean applyToEachSpot(BiFunction<Integer, Integer, Boolean> functionToApply) {
+        boolean spotsUpdated = false;
+
+        for (int row = 0; row < spots.length; row++) {
+            for (int column = 0; column < spots[0].length; column++) {
+                if (functionToApply.apply(row, column)) {
+                    spotsUpdated = true;
+                }
+            }
+        }
+        return spotsUpdated;
+    }
+
+    private boolean rePlaceTent(int row, int column) {
+        if (isTent(row, column)) {
+            return placeTent(row, column);
+        } else {
+            return false;
+        }
+    }
+
     private boolean placeTentNextToTreeIfOnlyOneUnmarkedSpotLeft(int row, int column) {
+        // Quick exit if this spot is not a TREE
+        if (spots[row][column] != TREE) {
+            return false;
+        }
+
         final int[] deltaRow = new int[]{-1, 0, 1, 0};
         final int[] deltaColumn = new int[]{0, 1, 0, -1};
 
@@ -97,7 +114,13 @@ public class Field {
         return false;
     }
 
-    private void markEmptyIfDiagonalToATree(int row, int column) {
+    private boolean markSpotsEmptyIfDiagonalToATree(int row, int column) {
+        // Quick exit if this spot is not unmarked
+        if (spots[row][column] != null) {
+            return false;
+        }
+
+        boolean spotsUpdated = false;
         final int[] deltaRow = new int[]{-1, -1, 1, 1};
         final int[] deltaColumn = new int[]{-1, 1, 1, -1};
 
@@ -106,8 +129,11 @@ public class Field {
             int newColumn = column + deltaColumn[i];
             if (isOnTheField(newRow, newColumn) && isTree(newRow, newColumn)) {
                 spots[row][column] = EMPTY;
+                spotsUpdated = true;
             }
         }
+
+        return spotsUpdated;
     }
 
     private boolean markEmptiesIfAllTentsFoundInRowOrColumn() {
@@ -115,8 +141,8 @@ public class Field {
 
         // Scan rows
         for (int row = 0; row < spots.length; row++) {
-            if (!rowComplete[row] && currentNumTentsInRow(row) == rowTentSums[row]) {
-                convertUnmarkedSpotsToEmptiesInRow(row);
+            if (!rowComplete[row] && countInRow(row, spot -> spot == TENT) == rowTentSums[row]) {
+                applyToUnmarkedSpotsInRow(row, (r, c) -> spots[r][c] = EMPTY);
                 spotsUpdated = true;
                 rowComplete[row] = true;
             }
@@ -124,8 +150,8 @@ public class Field {
 
         // Scan columns
         for (int column = 0; column < spots[0].length; column++) {
-            if (!columnComplete[column] && currentNumTentsInColumn(column) == columnTentSums[column]) {
-                convertUnmarkedSpotsToEmptiesInColumn(column);
+            if (!columnComplete[column] && countInColumn(column, spot -> spot == TENT) == columnTentSums[column]) {
+                applyToUnmarkedSpotsInColumn(column, (r, c) -> spots[r][c] = EMPTY);
                 spotsUpdated = true;
                 columnComplete[column] = true;
             }
@@ -139,8 +165,8 @@ public class Field {
 
         // Scan rows
         for (int row = 0; row < spots.length; row++) {
-            if (!rowComplete[row] && currentNumTentsAndUnmarkedInRow(row) == rowTentSums[row]) {
-                convertUnmarkedSpotsToTentsInRow(row);
+            if (!rowComplete[row] && countInRow(row, spot -> spot == TENT || spot == null) == rowTentSums[row]) {
+                applyToUnmarkedSpotsInRow(row, this::placeTent);
                 spotsUpdated = true;
                 rowComplete[row] = true;
             }
@@ -148,8 +174,8 @@ public class Field {
 
         // Scan columns
         for (int column = 0; column < spots[0].length; column++) {
-            if (!columnComplete[column] && currentNumTentsAndUnmarkedInColumn(column) == columnTentSums[column]) {
-                convertUnmarkedSpotsToTentsInColumn(column);
+            if (!columnComplete[column] && countInColumn(column, spot -> spot == TENT || spot == null) == columnTentSums[column]) {
+                applyToUnmarkedSpotsInColumn(column, this::placeTent);
                 spotsUpdated = true;
                 columnComplete[column] = true;
             }
@@ -158,74 +184,39 @@ public class Field {
         return spotsUpdated;
     }
 
-    private int currentNumTentsAndUnmarkedInRow(int row) {
-        int tentCount = 0;
+    private int countInRow(int row, Predicate<Spot> spotPredicate) {
+        int count = 0;
         for (Spot spot : spots[row]) {
-            if (spot == TENT || spot == null) {
-                tentCount++;
+            if (spotPredicate.test(spot)) {
+                count++;
             }
         }
-        return tentCount;
+        return count;
     }
 
-    private int currentNumTentsInRow(int row) {
-        int tentCount = 0;
-        for (Spot spot : spots[row]) {
-            if (spot == TENT) {
-                tentCount++;
-            }
-        }
-        return tentCount;
-    }
-
-    private int currentNumTentsInColumn(int column) {
-        int tentCount = 0;
+    private int countInColumn(int column, Predicate<Spot> spotPredicate) {
+        int count = 0;
         for (Spot[] row : spots) {
-            if (row[column] == TENT) {
-                tentCount++;
+            Spot spot = row[column];
+            if (spotPredicate.test(spot)) {
+                count++;
             }
         }
-        return tentCount;
+        return count;
     }
 
-    private int currentNumTentsAndUnmarkedInColumn(int column) {
-        int tentCount = 0;
-        for (Spot[] row : spots) {
-            if (row[column] == TENT || row[column] == null) {
-                tentCount++;
-            }
-        }
-        return tentCount;
-    }
-
-    private void convertUnmarkedSpotsToEmptiesInRow(int row) {
+    private void applyToUnmarkedSpotsInRow(int row, BiConsumer<Integer, Integer> consumerToApply) {
         for (int column = 0; column < spots[0].length; column++) {
             if (spots[row][column] == null) {
-                spots[row][column] = EMPTY;
+                consumerToApply.accept(row, column);
             }
         }
     }
 
-    private void convertUnmarkedSpotsToTentsInRow(int row) {
-        for (int column = 0; column < spots[0].length; column++) {
-            if (spots[row][column] == null) {
-                placeTent(row, column);
-            }
-        }
-    }
-
-    private void convertUnmarkedSpotsToEmptiesInColumn(int column) {
+    private void applyToUnmarkedSpotsInColumn(int column, BiConsumer<Integer, Integer> consumerToApply) {
         for (int row = 0; row < spots.length; row++) {
             if (spots[row][column] == null) {
-                spots[row][column] = EMPTY;
-            }
-        }
-    }
-
-    private void convertUnmarkedSpotsToTentsInColumn(int column) {
-        for (int row = 0; row < spots.length; row++) {
-            if (spots[row][column] == null) {
-                placeTent(row, column);
+                consumerToApply.accept(row, column);
             }
         }
     }
@@ -233,7 +224,7 @@ public class Field {
     /**
      * Places a tent and marks the surrounding spots as EMPTY
      */
-    private void placeTent(int rowIndex, int columnIndex) {
+    private boolean placeTent(int rowIndex, int columnIndex) {
         spots[rowIndex][columnIndex] = TENT;
 
         int[] deltaRow = new int[]{-1, -1, -1, 0, 0, 1, 1, 1};
@@ -247,6 +238,8 @@ public class Field {
                 spots[newRow][newColumn] = EMPTY;
             }
         }
+
+        return true;
     }
 
     private boolean isOnTheField(int row, int column) {
