@@ -40,11 +40,11 @@ public class Field {
         while (spotsUpdated) {
             spotsUpdated = false;
 
-            if (markEmptiesIfAllTentsFoundInRowOrColumn()) {
+            if (countSpotsAndApplyChangeToUnmarkedSpots(Spot::isTent, this::markEmpty)) {
                 spotsUpdated = true;
             }
 
-            if (placeTentsOnUnmarkedSpotsIfTheyMustBePlacedToMatchEdgeCounts()) {
+            if (countSpotsAndApplyChangeToUnmarkedSpots(Spot::isTentOrUnmarked, this::placeTent)) {
                 spotsUpdated = true;
             }
 
@@ -136,13 +136,13 @@ public class Field {
         return spotsUpdated;
     }
 
-    private boolean markEmptiesIfAllTentsFoundInRowOrColumn() {
+    private boolean countSpotsAndApplyChangeToUnmarkedSpots(Predicate<Spot> countPredicate, BiConsumer<Integer, Integer> consumerToApply) {
         boolean spotsUpdated = false;
 
         // Scan rows
         for (int row = 0; row < spots.length; row++) {
-            if (!rowComplete[row] && countInRow(row, Spot::isTent) == rowTentSums[row]) {
-                applyToUnmarkedSpotsInRow(row, (r, c) -> spots[r][c] = EMPTY);
+            if (!rowComplete[row] && countInRow(row, countPredicate) == rowTentSums[row]) {
+                applyToUnmarkedSpotsInRow(row, consumerToApply);
                 spotsUpdated = true;
                 rowComplete[row] = true;
             }
@@ -150,32 +150,8 @@ public class Field {
 
         // Scan columns
         for (int column = 0; column < spots[0].length; column++) {
-            if (!columnComplete[column] && countInColumn(column, Spot::isTent) == columnTentSums[column]) {
-                applyToUnmarkedSpotsInColumn(column, (r, c) -> spots[r][c] = EMPTY);
-                spotsUpdated = true;
-                columnComplete[column] = true;
-            }
-        }
-
-        return spotsUpdated;
-    }
-
-    private boolean placeTentsOnUnmarkedSpotsIfTheyMustBePlacedToMatchEdgeCounts() {
-        boolean spotsUpdated = false;
-
-        // Scan rows
-        for (int row = 0; row < spots.length; row++) {
-            if (!rowComplete[row] && countInRow(row, Spot::isTentOrUnmarked) == rowTentSums[row]) {
-                applyToUnmarkedSpotsInRow(row, this::placeTent);
-                spotsUpdated = true;
-                rowComplete[row] = true;
-            }
-        }
-
-        // Scan columns
-        for (int column = 0; column < spots[0].length; column++) {
-            if (!columnComplete[column] && countInColumn(column, Spot::isTentOrUnmarked) == columnTentSums[column]) {
-                applyToUnmarkedSpotsInColumn(column, this::placeTent);
+            if (!columnComplete[column] && countInColumn(column, countPredicate) == columnTentSums[column]) {
+                applyToUnmarkedSpotsInColumn(column, consumerToApply);
                 spotsUpdated = true;
                 columnComplete[column] = true;
             }
@@ -239,6 +215,11 @@ public class Field {
             }
         }
 
+        return true;
+    }
+
+    private boolean markEmpty(int row, int column) {
+        spots[row][column] = EMPTY;
         return true;
     }
 
