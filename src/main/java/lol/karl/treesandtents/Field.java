@@ -4,7 +4,8 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
-import static lol.karl.treesandtents.Spot.*;
+import static lol.karl.treesandtents.Spot.EMPTY;
+import static lol.karl.treesandtents.Spot.TENT;
 
 public class Field {
     private Spot[][] spots;
@@ -30,8 +31,7 @@ public class Field {
     }
 
     public void solve() {
-        // Some one-off rules to apply
-        applyToEachSpot(this::rePlaceTent);
+        applyToEachSpot(this::rePlaceTent);  // this marks adjacent spots as EMPTY
         applyToEachSpot(this::markSpotsEmptyIfDiagonalToATree);
 
         boolean spotsUpdated = true;
@@ -79,7 +79,7 @@ public class Field {
 
     private boolean placeTentNextToTreeIfOnlyOneUnmarkedSpotLeft(int row, int column) {
         // Quick exit if this spot is not a TREE
-        if (spots[row][column] != TREE) {
+        if (!isTree(row, column)) {
             return false;
         }
 
@@ -116,7 +116,7 @@ public class Field {
 
     private boolean markSpotsEmptyIfDiagonalToATree(int row, int column) {
         // Quick exit if this spot is not unmarked
-        if (spots[row][column] != null) {
+        if (!isUnmarked(row, column)) {
             return false;
         }
 
@@ -141,7 +141,7 @@ public class Field {
 
         // Scan rows
         for (int row = 0; row < spots.length; row++) {
-            if (!rowComplete[row] && countInRow(row, spot -> spot == TENT) == rowTentSums[row]) {
+            if (!rowComplete[row] && countInRow(row, Spot::isTent) == rowTentSums[row]) {
                 applyToUnmarkedSpotsInRow(row, (r, c) -> spots[r][c] = EMPTY);
                 spotsUpdated = true;
                 rowComplete[row] = true;
@@ -150,7 +150,7 @@ public class Field {
 
         // Scan columns
         for (int column = 0; column < spots[0].length; column++) {
-            if (!columnComplete[column] && countInColumn(column, spot -> spot == TENT) == columnTentSums[column]) {
+            if (!columnComplete[column] && countInColumn(column, Spot::isTent) == columnTentSums[column]) {
                 applyToUnmarkedSpotsInColumn(column, (r, c) -> spots[r][c] = EMPTY);
                 spotsUpdated = true;
                 columnComplete[column] = true;
@@ -165,7 +165,7 @@ public class Field {
 
         // Scan rows
         for (int row = 0; row < spots.length; row++) {
-            if (!rowComplete[row] && countInRow(row, spot -> spot == TENT || spot == null) == rowTentSums[row]) {
+            if (!rowComplete[row] && countInRow(row, Spot::isTentOrUnmarked) == rowTentSums[row]) {
                 applyToUnmarkedSpotsInRow(row, this::placeTent);
                 spotsUpdated = true;
                 rowComplete[row] = true;
@@ -174,7 +174,7 @@ public class Field {
 
         // Scan columns
         for (int column = 0; column < spots[0].length; column++) {
-            if (!columnComplete[column] && countInColumn(column, spot -> spot == TENT || spot == null) == columnTentSums[column]) {
+            if (!columnComplete[column] && countInColumn(column, Spot::isTentOrUnmarked) == columnTentSums[column]) {
                 applyToUnmarkedSpotsInColumn(column, this::placeTent);
                 spotsUpdated = true;
                 columnComplete[column] = true;
@@ -207,7 +207,7 @@ public class Field {
 
     private void applyToUnmarkedSpotsInRow(int row, BiConsumer<Integer, Integer> consumerToApply) {
         for (int column = 0; column < spots[0].length; column++) {
-            if (spots[row][column] == null) {
+            if (isUnmarked(row, column)) {
                 consumerToApply.accept(row, column);
             }
         }
@@ -215,7 +215,7 @@ public class Field {
 
     private void applyToUnmarkedSpotsInColumn(int column, BiConsumer<Integer, Integer> consumerToApply) {
         for (int row = 0; row < spots.length; row++) {
-            if (spots[row][column] == null) {
+            if (isUnmarked(row, column)) {
                 consumerToApply.accept(row, column);
             }
         }
@@ -248,28 +248,23 @@ public class Field {
     }
 
     private boolean isUnmarked(int row, int column) {
-        return spots[row][column] == null;
+        return spots[row][column].isUnmarked();
     }
 
     private boolean isTent(int row, int column) {
-        return spots[row][column] == TENT;
+        return spots[row][column].isTent();
     }
 
     private boolean isTree(int row, int column) {
-        return spots[row][column] == TREE;
-    }
-
-    private boolean isEmpty(int row, int column) {
-        return spots[row][column] == EMPTY;
+        return spots[row][column].isTree();
     }
 
     private void print(Spot[][] spots) {
         // todo: print the totals along the edge, too
-        for (int rowIndex = 0; rowIndex < spots.length; rowIndex++) {
+        for (Spot[] row : spots) {
             for (int columnIndex = 0; columnIndex < spots[0].length; columnIndex++) {
-                Spot spot = spots[rowIndex][columnIndex];
-                String emoji = spot != null ? spot.toString() : " ";
-                System.out.print(emoji + " ");
+                Spot spot = row[columnIndex];
+                System.out.print(spot.toString() + " ");
             }
             System.out.println();
         }

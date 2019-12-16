@@ -1,17 +1,32 @@
 package lol.karl.treesandtents;
 
 public enum Spot {
-//    TREE("🌲"), TENT("⛺"), EMPTY("🐾");
-    TREE("T"), TENT("A"), EMPTY("x");
+    UNMARKED(" "), TREE("T"), TENT("A"), EMPTY("x");
 
-    private final String emoji;
+    private final String displayChar;
 
-    Spot(String emoji) {
-        this.emoji = emoji;
+    Spot(String displayChar) {
+        this.displayChar = displayChar;
     }
 
     @Override
     public String toString() {
-        return this.emoji;
+        return this.displayChar;
+    }
+
+    public boolean isUnmarked() {
+        return this == UNMARKED;
+    }
+
+    public boolean isTent() {
+        return this == TENT;
+    }
+
+    public boolean isTentOrUnmarked() {
+        return isTent() || isUnmarked();
+    }
+
+    public boolean isTree() {
+        return this == TREE;
     }
 }
